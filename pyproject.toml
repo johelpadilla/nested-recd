@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nested-recd"
+version = "0.1.0"
+description = "Nested ordinal RECD: Φ1–Φ3 conjunction levels and λ-weighted Discrete Extramental Clock"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Johel Padilla-Villanueva", email = "joel.padilla2@upr.edu" },
+]
+keywords = [
+    "RECD",
+    "ordinal patterns",
+    "nested time",
+    "Systemic Tau",
+    "complexity",
+    "early-warning",
+    "network physiology",
+    "Bandt-Pompe",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.22",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/johelpadilla/nested-recd"
+Repository = "https://github.com/johelpadilla/nested-recd"
+Issues = "https://github.com/johelpadilla/nested-recd/issues"
+Documentation = "https://github.com/johelpadilla/nested-recd#readme"
+DOI = "https://doi.org/10.5281/zenodo.21270699"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nested_recd = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

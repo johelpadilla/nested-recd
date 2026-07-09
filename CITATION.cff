@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "nested-recd: Nested ordinal RECD levels"
+version: 0.1.0
+date-released: "2026-07-08"
+authors:
+  - family-names: Padilla-Villanueva
+    given-names: Johel
+    orcid: "https://orcid.org/0000-0002-5797-6931"
+    affiliation: "University of Puerto Rico, Medical Sciences Campus"
+license: MIT
+repository-code: "https://github.com/johelpadilla/nested-recd"
+url: "https://pypi.org/project/nested-recd/"
+keywords:
+  - RECD
+  - ordinal patterns
+  - nested time
+  - Systemic Tau
+  - complexity
+abstract: >-
+  Pure-NumPy implementation of nested ordinal conjunction levels (Φ1, Φ2, Φ3)
+  and λ-weighted Discrete Extramental Clock (RECD) accumulation.
+references:
+  - type: software
+    title: "CCTP/SDDB: Systemic Tau and ordinal RECD before spontaneous ventricular fibrillation"
+    doi: "10.5281/zenodo.21270699"
+    authors:
+      - family-names: Padilla-Villanueva
+        given-names: Johel
