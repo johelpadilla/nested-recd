@@ -19,14 +19,20 @@ import numpy as np
 from typing import Dict, Tuple, Optional
 import warnings
 
-# Defaults quirúrgicos (ver diseño)
+# Defaults quirúrgicos (ver diseño + excess³ methods contract)
 DEFAULT_M = 3
 DEFAULT_DELAY = 1
 DEFAULT_D_PERSIST = 4
 DEFAULT_WINDOW_TAU = 13
+DEFAULT_WINDOW = DEFAULT_WINDOW_TAU  # alias (methods paper)
 DEFAULT_THETA_CHAOS = 0.41
 DELTA_FEIGENBAUM = 4.6692016091
-DEFAULT_THETA3 = 0.10  # Ajustado a la baja tras piloto (más sensible sin perder especificidad)
+DEFAULT_THETA3 = 0.10  # software default
+DEFAULT_THETA3_CARDIO = 0.08  # methods cardio-like reference
+
+# excess³ = α_Syn · Syn + α_Surp · Surp  (fixed a priori; never fit on target data)
+ALPHA_SYN = 0.6
+ALPHA_SURP = 0.4
 
 def _gen_ordinal(x: np.ndarray, m: int = DEFAULT_M, delay: int = DEFAULT_DELAY) -> np.ndarray:
     """Bandt–Pompe ordinal symbols (pure NumPy, no numba required)."""
@@ -234,75 +240,246 @@ def _joint_entropy_and_marginals(S_window: np.ndarray) -> Tuple[float, float, fl
     return H_joint, H_marg_sum, synergy_proxy
 
 
+def compute_excess3_window(
+    win: np.ndarray,
+    use_surprise: bool = True,
+    alpha_syn: float = ALPHA_SYN,
+    alpha_surp: float = ALPHA_SURP,
+) -> float:
+    """
+    excess³ score on a single window of joint ordinal symbols (shape (w, N)).
+
+    Canonical hybrid proxy (methods contract):
+        excess3 = alpha_syn · Syn + alpha_surp · Surp
+    with default weights (0.6, 0.4) fixed a priori — never optimised on the
+    scientific dataset under test.
+
+    Syn: synergistic residual multiinformation proxy
+         max(0, TC − (N−1)·MĪ_pair).
+    Surp: observed-vs-independence joint surprise (frequency-weighted log-ratio).
+
+    This is a **proxy**, not a complete PID synergy atom.
+    """
+    win = np.asarray(win)
+    if win.ndim != 2 or win.shape[0] == 0:
+        return float("nan")
+    if win.shape[1] < 2:
+        return 0.0
+
+    _, _, syn = _joint_entropy_and_marginals(win)
+    if not use_surprise:
+        return float(syn)
+
+    from collections import Counter
+
+    joint_tuples = [tuple(int(v) for v in row) for row in win]
+    counter = Counter(joint_tuples)
+    T_win = len(joint_tuples)
+    surprises = []
+    for u, cnt in counter.items():
+        p_indep = 1.0
+        for k, val in enumerate(u):
+            p_indep *= max(float(np.mean(win[:, k] == val)), 1e-9)
+        p_obs = cnt / T_win
+        ratio = p_obs / max(p_indep, 1e-9)
+        excess_log = max(0.0, np.log2(ratio)) if ratio > 1 else 0.0
+        surprises.append(excess_log * (cnt / T_win))
+    joint_surprise = float(np.sum(surprises)) if surprises else 0.0
+    return float(alpha_syn * syn + alpha_surp * joint_surprise)
+
+
+def compute_phi3_excess(
+    S: np.ndarray,
+    window: int = DEFAULT_WINDOW_TAU,
+    theta: float = DEFAULT_THETA3,
+    stride: int = 1,
+    use_surprise: bool = True,
+    alpha_syn: float = ALPHA_SYN,
+    alpha_surp: float = ALPHA_SURP,
+    fill: bool = False,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Continuous excess³ (primary) and binary Φ₃ (secondary) on symbol matrix S.
+
+    Returns
+    -------
+    phi3 : ndarray
+        Binary ticks: 1 if excess3 > theta else 0 (NaN before first full window).
+    excess3 : ndarray
+        Continuous hybrid score (primary Level-3 readout).
+
+    Parameters
+    ----------
+    fill : bool
+        If True, forward-fill NaNs after the first finite score (plot convenience).
+        Default False preserves sparse stride semantics.
+    """
+    S = np.asarray(S)
+    T_eff, N = S.shape
+    phi3 = np.full(T_eff, np.nan)
+    excess = np.full(T_eff, np.nan)
+
+    if T_eff < window or N < 2:
+        return phi3, excess
+
+    for t in range(window - 1, T_eff, stride):
+        score = compute_excess3_window(
+            S[t - window + 1 : t + 1],
+            use_surprise=use_surprise,
+            alpha_syn=alpha_syn,
+            alpha_surp=alpha_surp,
+        )
+        excess[t] = score
+        phi3[t] = 1.0 if score > theta else 0.0
+
+    if fill:
+        last = np.nan
+        for t in range(T_eff):
+            if np.isfinite(excess[t]):
+                last = excess[t]
+            elif np.isfinite(last):
+                excess[t] = last
+                phi3[t] = 1.0 if last > theta else 0.0
+
+    return phi3, excess
+
+
 def compute_phi3(
     S: np.ndarray,
     window: int = 13,
     theta: float = DEFAULT_THETA3,
     stride: int = 1,
-    use_surprise: bool = True
+    use_surprise: bool = True,
+    alpha_syn: float = ALPHA_SYN,
+    alpha_surp: float = ALPHA_SURP,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Φ₃(t): Score de sinergia / irreductibilidad (proxy mejorado post-piloto).
+    Φ₃(t) binary + continuous excess³ series.
 
-    Dos componentes:
-    - excess (total correlation - pairwise) del método anterior.
-    - joint_surprise: promedio de "sorpresa" de las tuplas observadas
-      vs modelo de independencia ( -log2(P_indep) ponderado por frecuencia observada ).
+    Continuous excess³ is the **primary** Level-3 magnitude (methods contract);
+    Φ₃ only counts threshold crossings. Weights default to (ALPHA_SYN, ALPHA_SURP).
 
-    Si use_surprise=True, el score combina ambos. Esto hace el proxy
-    más sensible a configuraciones conjuntas "improbables bajo independencia"
-    que no se explican por marginales (más cerca de irreductibilidad).
-
-    Retorna (phi3_binary, excess_raw)  -- excess ahora es el score combinado.
+    Returns (phi3_binary, excess3_continuous).
     """
-    T_eff, N = S.shape
-    phi3 = np.full(T_eff, np.nan)
-    excess = np.full(T_eff, np.nan)
+    return compute_phi3_excess(
+        S,
+        window=window,
+        theta=theta,
+        stride=stride,
+        use_surprise=use_surprise,
+        alpha_syn=alpha_syn,
+        alpha_surp=alpha_surp,
+        fill=False,
+    )
 
-    if T_eff < window:
-        return phi3, excess
 
-    for t in range(window - 1, T_eff, stride):
-        win = S[t - window + 1 : t + 1]
-        T_win = len(win)
+def mean_excess_pre_post(
+    excess3: np.ndarray,
+    split: int,
+) -> Tuple[float, float, float]:
+    """
+    Mean continuous excess³ before / after a split index, and Δ = post − pre.
 
-        # Componente 1: exceso sinérgico previo (total corr - pairwise)
-        _, _, syn = _joint_entropy_and_marginals(win)
+    ``split`` is an index into the excess3 array (same time base as returned by
+    compute_recd_from_conjunctions / compute_phi3_excess).
+    """
+    excess3 = np.asarray(excess3, dtype=float)
+    if split <= 0 or split >= len(excess3):
+        raise ValueError(f"split={split} out of range for length {len(excess3)}")
+    pre = float(np.nanmean(excess3[:split]))
+    post = float(np.nanmean(excess3[split:]))
+    return pre, post, post - pre
 
-        # Componente 2: Joint surprise (más directo para "irreductible")
-        if use_surprise:
-            from collections import Counter
-            joint_tuples = [tuple(int(v) for v in row) for row in win]  # asegurar python ints
-            counter = Counter(joint_tuples)
-            uniq = list(counter.keys())
-            counts = np.array(list(counter.values()))
-            T_win = len(joint_tuples)
 
-            # P_indep por tupla + "exceso de ocurrencia" (log ratio observado / independencia)
-            # Esto captura configuraciones que ocurren MÁS de lo esperado por marginales → más "irreducible"
-            surprises = []
-            for u, cnt in zip(uniq, counts):
-                p_indep = 1.0
-                for k, val in enumerate(u):
-                    pk = np.mean([row[k] == val for row in joint_tuples])
-                    p_indep *= max(pk, 1e-9)
-                p_obs = cnt / T_win
-                # log-ratio: >0 cuando ocurre más de lo esperado por independencia
-                ratio = p_obs / max(p_indep, 1e-9)
-                excess_log = max(0.0, np.log2(ratio)) if ratio > 1 else 0.0
-                weight = cnt / T_win
-                surprises.append(excess_log * weight)
+def surrogate_pvalue_delta_excess3(
+    X: np.ndarray,
+    split: int,
+    n_surr: int = 199,
+    method: str = "phase",
+    seed: int = 0,
+    m: int = DEFAULT_M,
+    window: int = DEFAULT_WINDOW_TAU,
+    theta3: float = DEFAULT_THETA3,
+    stride: int = 1,
+    delay: int = DEFAULT_DELAY,
+    alpha_syn: float = ALPHA_SYN,
+    alpha_surp: float = ALPHA_SURP,
+) -> Dict[str, float]:
+    """
+    Two-sided surrogate p-value for |Δ excess3| under independent phase-shuffle
+    (default) or column permutation — methods-paper null protocol.
 
-            joint_surprise = float(np.sum(surprises)) if surprises else 0.0
-            # Combinar (syn ya es en bits-ish, surprise también)
-            combined = 0.6 * syn + 0.4 * joint_surprise   # pesos heurísticos pero transparentes
+    Inference is on the **full contrast** |Δ|, not mean-vs-mean of means alone.
+
+    Parameters
+    ----------
+    X : (T, N) array
+        Multivariate series (raw values; symbols computed inside).
+    split : int
+        Split index on the **raw** time axis; mapped to symbol time via
+        embedding length (m, delay).
+    method : {"phase", "permute"}
+        "phase" uses per-column IAAFT / phase-shuffle; "permute" shuffles time.
+    """
+    from nested_recd.surrogates import (
+        phase_shuffle_independent,
+        random_permutation_independent,
+    )
+
+    X = np.asarray(X)
+    if X.ndim != 2:
+        raise ValueError("X must be shape (T, N)")
+
+    def _delta_on(arr: np.ndarray) -> float:
+        S = generate_multivariate_symbols(arr, m=m, delay=delay)
+        if len(S) == 0:
+            return float("nan")
+        # Map split from raw time to symbol index (conservative)
+        emb = (m - 1) * delay
+        split_s = int(np.clip(split - emb, 1, len(S) - 1))
+        _, excess = compute_phi3_excess(
+            S,
+            window=window,
+            theta=theta3,
+            stride=stride,
+            alpha_syn=alpha_syn,
+            alpha_surp=alpha_surp,
+        )
+        _, _, d = mean_excess_pre_post(excess, split_s)
+        return float(d)
+
+    obs = _delta_on(X)
+    null = []
+    rng = np.random.default_rng(seed)
+    for _ in range(n_surr):
+        s = int(rng.integers(0, 2**31 - 1))
+        if method == "permute":
+            Xs = random_permutation_independent(X, seed=s)
         else:
-            combined = syn
-
-        excess[t] = combined
-        phi3[t] = 1.0 if combined > theta else 0.0
-
-    return phi3, excess
+            Xs = phase_shuffle_independent(X, seed=s)
+        null.append(_delta_on(Xs))
+    null = np.asarray(null, dtype=float)
+    null = null[np.isfinite(null)]
+    if not np.isfinite(obs) or len(null) == 0:
+        return {
+            "delta_obs": float(obs) if np.isfinite(obs) else float("nan"),
+            "abs_delta_obs": float("nan"),
+            "p_value": float("nan"),
+            "n_surr": float(len(null)),
+            "method": method,
+        }
+    abs_obs = abs(obs)
+    # Add-one smoothing: (1 + #{|null| >= |obs|}) / (1 + n)
+    p = (1.0 + float(np.sum(np.abs(null) >= abs_obs))) / (1.0 + len(null))
+    return {
+        "delta_obs": float(obs),
+        "abs_delta_obs": float(abs_obs),
+        "p_value": float(p),
+        "n_surr": float(len(null)),
+        "method": method,
+        "null_mean_abs": float(np.mean(np.abs(null))),
+        "null_std_abs": float(np.std(np.abs(null))),
+    }
 
 
 # ============================================================
@@ -381,27 +558,40 @@ def compute_recd_from_conjunctions(
     theta3: float = DEFAULT_THETA3,
     window_tau: int = DEFAULT_WINDOW_TAU,
     lam_override: Optional[np.ndarray] = None,
+    stride: int = 1,
+    alpha_syn: float = ALPHA_SYN,
+    alpha_surp: float = ALPHA_SURP,
     **alpha_kwargs
 ) -> Dict[str, np.ndarray]:
     """
-    Pipeline quirúrgico completo:
-    - Símbolos ordinales
-    - Φ1, Φ2, Φ3
-    - λ y α(λ)
-    - ΔRECD_new y T_new
+    Full nested ordinal RECD pipeline:
+    - Bandt–Pompe symbols
+    - Φ1, Φ2, Φ3 (binary) + continuous excess³ (primary Level-3 readout)
+    - λ and α(λ) regime weights
+    - ΔRECD and cumulative T_recd
 
-    Si tau_s no se provee, se espera que el caller lo calcule con la infraestructura existente.
+    Level-3 contract (excess³ methods):
+    - Continuous ``excess3`` is the primary magnitude for order-3 claims.
+    - ``phi3`` is a secondary threshold discretisation of excess3.
+    - ``delta_recd`` keeps the legacy λ-weighted clock using **binary** Φ₃
+      (back-compat with CCTP / Discrete Extramental Clock nesting). Do not
+      treat ``delta_recd`` alone as the Level-3 scientific readout.
 
-    lam_override: si se provee (escalar o array), se usa directamente para calcular α(λ)
-                  en lugar de derivar λ de tau_s. Útil para Opción 1 (ground-truth r)
-                  o alphas fijos, para aislar el efecto de régimen sobre Nivel 3.
+    If tau_s is omitted, λ=0 (warning). Use ``lam_override`` for regime ground truth.
     """
     S = generate_multivariate_symbols(X, m=m)
     T_eff = S.shape[0]
 
     phi1 = compute_phi1(S)
     phi2 = compute_phi2(S, d=d)
-    phi3, excess3 = compute_phi3(S, window=window_tau, theta=theta3)
+    phi3, excess3 = compute_phi3(
+        S,
+        window=window_tau,
+        theta=theta3,
+        stride=stride,
+        alpha_syn=alpha_syn,
+        alpha_surp=alpha_surp,
+    )
 
     # Determinar λ: override > tau-derived > zero
     if lam_override is not None:
@@ -425,6 +615,7 @@ def compute_recd_from_conjunctions(
     phi3_safe = np.nan_to_num(phi3, nan=0.0)
     excess3_safe = np.nan_to_num(excess3, nan=0.0)
 
+    # Legacy RECD clock: binary Φ₃ in the α-weighted sum (back-compat)
     delta_recd = a1 * phi1 + a2 * phi2 + a3 * phi3_safe
     T_recd = np.nancumsum(delta_recd)
 
@@ -441,9 +632,17 @@ def compute_recd_from_conjunctions(
         "delta_recd": delta_recd,
         "T_recd": T_recd,
         "params": {
-            "m": m, "d": d, "theta3": theta3,
-            "window_tau": window_tau, **alpha_kwargs
-        }
+            "m": m,
+            "d": d,
+            "theta3": theta3,
+            "window_tau": window_tau,
+            "stride": stride,
+            "alpha_syn": alpha_syn,
+            "alpha_surp": alpha_surp,
+            "level3_primary": "excess3",
+            "level3_secondary": "phi3",
+            **alpha_kwargs,
+        },
     }
 
 

@@ -1,9 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software for Level-3 / excess³, please cite the methods preprint and this package."
 type: software
-title: "nested-recd: Nested ordinal RECD levels"
-version: 0.1.0
-date-released: "2026-07-08"
+title: "nested-recd: Nested ordinal RECD levels and continuous excess³"
+version: 0.2.0
+date-released: "2026-07-15"
 authors:
   - family-names: Padilla-Villanueva
     given-names: Johel
@@ -14,17 +14,32 @@ repository-code: "https://github.com/johelpadilla/nested-recd"
 url: "https://pypi.org/project/nested-recd/"
 keywords:
   - RECD
+  - excess3
   - ordinal patterns
   - nested time
   - Systemic Tau
   - complexity
 abstract: >-
-  Pure-NumPy implementation of nested ordinal conjunction levels (Φ1, Φ2, Φ3)
-  and λ-weighted Discrete Extramental Clock (RECD) accumulation.
+  Pure-NumPy implementation of nested ordinal conjunction levels (Φ1, Φ2, Φ3),
+  continuous excess³ (primary Level-3 hybrid proxy 0.6·Syn + 0.4·Surp),
+  phase-shuffle nulls on |Δ excess3|, and λ-weighted Discrete Extramental Clock
+  accumulation. Canonical software for the excess³ methods specification.
 references:
+  - type: article
+    title: "excess³: A Pre-Specified Continuous Proxy for Order-3 Synergistic Surplus"
+    doi: "10.5281/zenodo.21385937"
+    authors:
+      - family-names: Padilla-Villanueva
+        given-names: Johel
   - type: software
     title: "CCTP/SDDB: Systemic Tau and ordinal RECD before spontaneous ventricular fibrillation"
     doi: "10.5281/zenodo.21270699"
+    authors:
+      - family-names: Padilla-Villanueva
+        given-names: Johel
+  - type: software
+    title: "Systemic Tau / Academy Learning Tau software stack"
+    doi: "10.5281/zenodo.20576241"
     authors:
       - family-names: Padilla-Villanueva
         given-names: Johel

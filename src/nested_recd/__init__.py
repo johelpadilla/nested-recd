@@ -2,8 +2,8 @@
 nested-recd
 ===========
 
-Nested ordinal RECD: Φ₁ / Φ₂ / Φ₃ conjunction levels and λ-weighted
-Discrete Extramental Clock accumulation.
+Nested ordinal RECD: Φ₁ / Φ₂ / Φ₃ conjunction levels, continuous excess³
+(primary Level-3 readout), and λ-weighted Discrete Extramental Clock.
 
 Quick start
 -----------
@@ -11,7 +11,7 @@ Quick start
 >>> from nested_recd import compute_recd_from_conjunctions
 >>> X = np.random.randn(500, 3).cumsum(axis=0)
 >>> out = compute_recd_from_conjunctions(X)
->>> out["T_recd"][-1]
+>>> float(np.nanmean(out["excess3"]))  # continuous primary Level-3 score
 """
 
 from nested_recd.ordinal_levels import (
@@ -19,13 +19,21 @@ from nested_recd.ordinal_levels import (
     DEFAULT_DELAY,
     DEFAULT_D_PERSIST,
     DEFAULT_WINDOW_TAU,
+    DEFAULT_WINDOW,
     DEFAULT_THETA_CHAOS,
     DEFAULT_THETA3,
+    DEFAULT_THETA3_CARDIO,
     DELTA_FEIGENBAUM,
+    ALPHA_SYN,
+    ALPHA_SURP,
     generate_multivariate_symbols,
     compute_phi1,
     compute_phi2,
     compute_phi3,
+    compute_phi3_excess,
+    compute_excess3_window,
+    mean_excess_pre_post,
+    surrogate_pvalue_delta_excess3,
     compute_lambda,
     alpha_weights,
     regime_lambda_proxy,
@@ -43,7 +51,7 @@ from nested_recd.surrogates import (
     compute_null_distribution,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "__version__",
@@ -51,13 +59,21 @@ __all__ = [
     "DEFAULT_DELAY",
     "DEFAULT_D_PERSIST",
     "DEFAULT_WINDOW_TAU",
+    "DEFAULT_WINDOW",
     "DEFAULT_THETA_CHAOS",
     "DEFAULT_THETA3",
+    "DEFAULT_THETA3_CARDIO",
     "DELTA_FEIGENBAUM",
+    "ALPHA_SYN",
+    "ALPHA_SURP",
     "generate_multivariate_symbols",
     "compute_phi1",
     "compute_phi2",
     "compute_phi3",
+    "compute_phi3_excess",
+    "compute_excess3_window",
+    "mean_excess_pre_post",
+    "surrogate_pvalue_delta_excess3",
     "compute_lambda",
     "alpha_weights",
     "regime_lambda_proxy",
