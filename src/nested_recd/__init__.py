@@ -3,7 +3,8 @@ nested-recd
 ===========
 
 Nested ordinal RECD: Φ₁ / Φ₂ / Φ₃ conjunction levels, continuous excess³
-(primary Level-3 readout), and λ-weighted Discrete Extramental Clock.
+(exportable Level-3 proxy; not the strong residual), optional Res_pair,
+and λ-weighted Discrete Extramental Clock.
 
 Quick start
 -----------
@@ -11,7 +12,7 @@ Quick start
 >>> from nested_recd import compute_recd_from_conjunctions
 >>> X = np.random.randn(500, 3).cumsum(axis=0)
 >>> out = compute_recd_from_conjunctions(X)
->>> float(np.nanmean(out["excess3"]))  # continuous primary Level-3 score
+>>> float(np.nanmean(out["excess3"]))  # continuous Level-3 *proxy* (T-IV)
 """
 
 from nested_recd.ordinal_levels import (
@@ -32,10 +33,16 @@ from nested_recd.ordinal_levels import (
     compute_phi3,
     compute_phi3_excess,
     compute_excess3_window,
+    compute_res_pair_window,
+    compute_res_pair,
+    pairwise_maxent_ipf,
+    kl_divergence,
     mean_excess_pre_post,
     surrogate_pvalue_delta_excess3,
     compute_lambda,
     alpha_weights,
+    alpha_weights_gibbs,
+    alpha_compare_template_gibbs,
     regime_lambda_proxy,
     compute_recd_from_conjunctions,
     simple_level_classification,
@@ -51,7 +58,7 @@ from nested_recd.surrogates import (
     compute_null_distribution,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.2.3"
 
 __all__ = [
     "__version__",
@@ -72,10 +79,16 @@ __all__ = [
     "compute_phi3",
     "compute_phi3_excess",
     "compute_excess3_window",
+    "compute_res_pair_window",
+    "compute_res_pair",
+    "pairwise_maxent_ipf",
+    "kl_divergence",
     "mean_excess_pre_post",
     "surrogate_pvalue_delta_excess3",
     "compute_lambda",
     "alpha_weights",
+    "alpha_weights_gibbs",
+    "alpha_compare_template_gibbs",
     "regime_lambda_proxy",
     "compute_recd_from_conjunctions",
     "simple_level_classification",

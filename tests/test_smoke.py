@@ -9,11 +9,15 @@ from nested_recd import (
     ALPHA_SURP,
     DEFAULT_THETA3,
     DEFAULT_THETA3_CARDIO,
+    alpha_weights,
+    alpha_weights_gibbs,
+    alpha_compare_template_gibbs,
     compute_recd_from_conjunctions,
     compute_phi1,
     compute_phi3,
     compute_phi3_excess,
     compute_excess3_window,
+    compute_res_pair_window,
     compute_weighted_contributions,
     generate_multivariate_symbols,
     mean_excess_pre_post,
@@ -24,7 +28,29 @@ from nested_recd import (
 
 
 def test_version():
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.2.3"
+
+
+def test_gibbs_alpha_monotonicity():
+    """α3/α1 increases with λ when κ>0 (Note 3 Prop. Gibbs admissible)."""
+    lam = np.array([0.0, 0.5, 1.0, 2.0])
+    a1, a2, a3 = alpha_weights_gibbs(lam, kappa=1.5, normalize=False)
+    ratio = a3 / np.maximum(a1, 1e-15)
+    assert np.all(np.diff(ratio) >= -1e-12)
+    assert float(ratio[-1]) > float(ratio[0])
+    # normalized simplex
+    n1, n2, n3 = alpha_weights_gibbs(lam, normalize=True)
+    assert np.allclose(n1 + n2 + n3, 1.0)
+
+
+def test_template_gibbs_bridge_bounded():
+    """Conj. bridge: L∞ distance of normalized families on [0,2] is finite."""
+    cmp = alpha_compare_template_gibbs()
+    assert float(cmp["max_Linf"][0]) < 1.0
+    assert float(cmp["max_L1"][0]) < 2.0
+    # both put more mass on level 3 at high λ than at λ=0
+    assert float(cmp["t3"][-1]) > float(cmp["t3"][0])
+    assert float(cmp["g3"][-1]) > float(cmp["g3"][0])
 
 
 def test_weights_a_priori():
@@ -130,6 +156,42 @@ def test_excess3_window_weights():
     score = compute_excess3_window(win)
     assert np.isfinite(score)
     assert score >= 0.0
+
+
+def test_res_pair_xor_vs_common_driver():
+    """Strong L3: XOR residual > common-driver residual (Nota 2 geometry)."""
+    rng = np.random.default_rng(42)
+    n = 400
+    # XOR / parity lock
+    a = rng.integers(0, 2, size=n)
+    b = rng.integers(0, 2, size=n)
+    c = a ^ b
+    win_xor = np.column_stack([a, b, c]).astype(int)
+    res_xor = compute_res_pair_window(win_xor)
+    # Common driver: b,c ≈ a
+    driver = rng.integers(0, 2, size=n)
+    noise = rng.random(n) < 0.05
+    b2 = np.where(noise, 1 - driver, driver)
+    noise2 = rng.random(n) < 0.05
+    c2 = np.where(noise2, 1 - driver, driver)
+    win_drv = np.column_stack([driver, b2, c2]).astype(int)
+    res_drv = compute_res_pair_window(win_drv)
+    assert res_xor >= 0.0 and res_drv >= 0.0
+    assert res_xor > res_drv + 0.05  # clear geometric separation
+
+
+def test_res_pair_d2_is_zero():
+    win = np.column_stack([np.zeros(30, dtype=int), np.ones(30, dtype=int)])
+    assert compute_res_pair_window(win) == 0.0
+
+
+def test_pipeline_optional_res_pair():
+    rng = np.random.default_rng(9)
+    X = rng.normal(size=(180, 3)).cumsum(axis=0)
+    out = compute_recd_from_conjunctions(X, compute_res=True, window_tau=20, stride=5)
+    assert "res_pair" in out
+    assert out["res_pair"].shape == out["excess3"].shape
+    assert np.nanmin(out["res_pair"][np.isfinite(out["res_pair"])]) >= -1e-9
 
 
 def test_mean_excess_pre_post():

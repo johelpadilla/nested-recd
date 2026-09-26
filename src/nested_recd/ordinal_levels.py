@@ -189,55 +189,68 @@ def compute_phi2(
 # NIVEL 3: Emergencia / Sinergia (proxy)
 # ============================================================
 
-def _joint_entropy_and_marginals(S_window: np.ndarray) -> Tuple[float, float, float]:
-    """
-    Calcula H(joint), promedio H(marginal), y proxy de info mutua pairwise promedio
-    sobre una ventana de símbolos.
-    Muy quirúrgico: conteos exactos (N pequeño, m=3 → 6^N factible).
-    """
-    T, N = S_window.shape
-    # Joint tuples como tuplas hashables
-    joint_tuples = [tuple(row) for row in S_window]
-    unique_j, counts_j = np.unique(joint_tuples, return_counts=True)
-    p_joint = counts_j / counts_j.sum()
-    H_joint = -np.sum(p_joint * np.log2(p_joint + 1e-12))
+def _entropy_from_counts(counts: np.ndarray) -> float:
+    p = counts / counts.sum()
+    return float(-np.sum(p * np.log2(p + 1e-12)))
 
-    # Marginales por variable
+
+def _joint_entropy_and_marginals(
+    S_window: np.ndarray,
+    legacy_pooled_counting: bool = False,
+) -> Tuple[float, float, float]:
+    """
+    H(joint), sum of marginal entropies, and the Syn proxy on one window.
+
+    Correct joint counting (default since 0.2.3) uses
+    ``np.unique(..., axis=0)`` on rows. ``legacy_pooled_counting=True``
+    reproduces <= 0.2.2, where ``np.unique`` on a list of tuples flattened
+    the tuples, so H_joint and each pairwise H were entropies of pooled
+    symbol values. Use the legacy mode only to reproduce archived numbers.
+
+        TC  = sum_i H(S_i) - H(S)
+        MI  = H(S_i) + H(S_j) - H(S_i, S_j)
+        Syn = max(0, TC - (N-1) * mean MI)
+    """
+    S_window = np.asarray(S_window)
+    _, N = S_window.shape
+
+    if legacy_pooled_counting:
+        _, counts_j = np.unique(S_window.ravel(), return_counts=True)
+    else:
+        _, counts_j = np.unique(S_window, axis=0, return_counts=True)
+    H_joint = _entropy_from_counts(counts_j)
+
     H_margs = []
     for k in range(N):
         _, c = np.unique(S_window[:, k], return_counts=True)
-        p = c / c.sum()
-        H_margs.append(-np.sum(p * np.log2(p + 1e-12)))
-    H_marg_mean = float(np.mean(H_margs))
+        H_margs.append(_entropy_from_counts(c))
     H_marg_sum = float(np.sum(H_margs))
 
-    # Pairwise MI promedio (aprox rápida)
     pair_mi = []
     for i in range(N):
         for j in range(i + 1, N):
-            joint2 = list(zip(S_window[:, i], S_window[:, j]))
-            _, cj = np.unique(joint2, return_counts=True)
-            pj = cj / cj.sum()
-            H2 = -np.sum(pj * np.log2(pj + 1e-12))
-
-            _, ci = np.unique(S_window[:, i], return_counts=True)
-            pi = ci / ci.sum()
-            Hi = -np.sum(pi * np.log2(pi + 1e-12))
-
-            _, cj2 = np.unique(S_window[:, j], return_counts=True)
-            pj2 = cj2 / cj2.sum()
-            Hj = -np.sum(pj2 * np.log2(pj2 + 1e-12))
-
-            mi = Hi + Hj - H2
-            pair_mi.append(max(0.0, mi))
+            pair = S_window[:, [i, j]]
+            if legacy_pooled_counting:
+                _, cj = np.unique(pair.ravel(), return_counts=True)
+            else:
+                _, cj = np.unique(pair, axis=0, return_counts=True)
+            H2 = _entropy_from_counts(cj)
+            pair_mi.append(max(0.0, H_margs[i] + H_margs[j] - H2))
     mi_pair_avg = float(np.mean(pair_mi)) if pair_mi else 0.0
 
-    # Total correlation approx = sum H - H_joint
     tc = H_marg_sum - H_joint
-    # "Synergy beyond pairwise" rough: tc - (N-1)*mi_pair_avg  (heurística; puede ser negativa)
     synergy_proxy = max(0.0, tc - (N - 1) * mi_pair_avg)
-
     return H_joint, H_marg_sum, synergy_proxy
+
+
+def _warn_legacy() -> None:
+    warnings.warn(
+        "legacy_pooled_counting=True reproduces the joint-counting bug of "
+        "nested-recd <= 0.2.2 (pooled symbol values instead of joint tuples "
+        "in H_joint and pairwise H). Use only to reproduce archived results.",
+        UserWarning,
+        stacklevel=3,
+    )
 
 
 def compute_excess3_window(
@@ -245,6 +258,7 @@ def compute_excess3_window(
     use_surprise: bool = True,
     alpha_syn: float = ALPHA_SYN,
     alpha_surp: float = ALPHA_SURP,
+    legacy_pooled_counting: bool = False,
 ) -> float:
     """
     excess³ score on a single window of joint ordinal symbols (shape (w, N)).
@@ -259,6 +273,9 @@ def compute_excess3_window(
     Surp: observed-vs-independence joint surprise (frequency-weighted log-ratio).
 
     This is a **proxy**, not a complete PID synergy atom.
+
+    ``legacy_pooled_counting`` (default False) reproduces the <= 0.2.2
+    pooled-symbol bug. Surp is the same in both modes.
     """
     win = np.asarray(win)
     if win.ndim != 2 or win.shape[0] == 0:
@@ -266,7 +283,9 @@ def compute_excess3_window(
     if win.shape[1] < 2:
         return 0.0
 
-    _, _, syn = _joint_entropy_and_marginals(win)
+    _, _, syn = _joint_entropy_and_marginals(
+        win, legacy_pooled_counting=legacy_pooled_counting
+    )
     if not use_surprise:
         return float(syn)
 
@@ -297,6 +316,7 @@ def compute_phi3_excess(
     alpha_syn: float = ALPHA_SYN,
     alpha_surp: float = ALPHA_SURP,
     fill: bool = False,
+    legacy_pooled_counting: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Continuous excess³ (primary) and binary Φ₃ (secondary) on symbol matrix S.
@@ -313,7 +333,11 @@ def compute_phi3_excess(
     fill : bool
         If True, forward-fill NaNs after the first finite score (plot convenience).
         Default False preserves sparse stride semantics.
+    legacy_pooled_counting : bool
+        Default False (joint tuples). True reproduces the <= 0.2.2 bug.
     """
+    if legacy_pooled_counting:
+        _warn_legacy()
     S = np.asarray(S)
     T_eff, N = S.shape
     phi3 = np.full(T_eff, np.nan)
@@ -328,6 +352,7 @@ def compute_phi3_excess(
             use_surprise=use_surprise,
             alpha_syn=alpha_syn,
             alpha_surp=alpha_surp,
+            legacy_pooled_counting=legacy_pooled_counting,
         )
         excess[t] = score
         phi3[t] = 1.0 if score > theta else 0.0
@@ -352,6 +377,7 @@ def compute_phi3(
     use_surprise: bool = True,
     alpha_syn: float = ALPHA_SYN,
     alpha_surp: float = ALPHA_SURP,
+    legacy_pooled_counting: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Φ₃(t) binary + continuous excess³ series.
@@ -370,7 +396,199 @@ def compute_phi3(
         alpha_syn=alpha_syn,
         alpha_surp=alpha_surp,
         fill=False,
+        legacy_pooled_counting=legacy_pooled_counting,
     )
+
+
+# ============================================================
+# Strong Level-3 residual: Res_pair = KL(P || P^(2))
+# ============================================================
+
+def _empirical_joint_table(win: np.ndarray) -> Tuple[np.ndarray, list]:
+    """
+    Build dense joint probability table over observed symbol alphabet.
+
+    Returns
+    -------
+    p : ndarray shape (k_0, k_1, ..., k_{N-1})
+        Empirical frequencies (sums to 1).
+    levels : list of 1d arrays
+        Sorted unique symbols per coordinate (axis order of ``p``).
+    """
+    win = np.asarray(win)
+    if win.ndim != 2 or win.shape[0] == 0:
+        raise ValueError("win must be (w, N) with w>0")
+    T, N = win.shape
+    levels = [np.unique(win[:, i]) for i in range(N)]
+    shape = tuple(len(lev) for lev in levels)
+    # Map symbols to indices
+    idx = np.zeros((T, N), dtype=int)
+    for i in range(N):
+        # searchsorted works because levels[i] is sorted unique
+        idx[:, i] = np.searchsorted(levels[i], win[:, i])
+    p = np.zeros(shape, dtype=float)
+    for t in range(T):
+        p[tuple(idx[t])] += 1.0
+    p /= p.sum()
+    return p, levels
+
+
+def _pair_marginal(p: np.ndarray, i: int, j: int) -> np.ndarray:
+    """Marginal of joint tensor p over all axes except i and j."""
+    axes = tuple(a for a in range(p.ndim) if a not in (i, j))
+    if axes:
+        m = p.sum(axis=axes)
+    else:
+        m = p.copy()
+    # Ensure axes order (i, j): if i>j, sum order may swap
+    if i > j:
+        m = m.T
+    return m
+
+
+def pairwise_maxent_ipf(
+    p_emp: np.ndarray,
+    max_iter: int = 200,
+    tol: float = 1e-10,
+) -> np.ndarray:
+    """
+    Fit discrete pairwise maxent / IPF model matching all bivariate marginals.
+
+    Starts from the product of univariate marginals and iteratively rescales
+    so that each pair marginal matches that of ``p_emp``. On finite alphabets
+    this is the standard iterative proportional fitting procedure toward the
+    I-projection onto the pairwise exponential family (when it exists in the
+    relative interior).
+
+    Parameters
+    ----------
+    p_emp : ndarray
+        Empirical joint (N-way table).
+    max_iter, tol :
+        Convergence controls.
+
+    Returns
+    -------
+    p2 : ndarray
+        Pairwise-consistent joint with same shape as ``p_emp``.
+    """
+    p_emp = np.asarray(p_emp, dtype=float)
+    if p_emp.ndim < 2:
+        return p_emp.copy()
+    N = p_emp.ndim
+    # Univariate marginals
+    marg1 = []
+    for i in range(N):
+        axes = tuple(a for a in range(N) if a != i)
+        mi = p_emp.sum(axis=axes)
+        marg1.append(mi)
+    # Initialize as product of marginals
+    p = marg1[0]
+    for i in range(1, N):
+        p = p[..., None] * marg1[i]
+    # p may need reshape to full shape
+    p = np.broadcast_to(p, p_emp.shape).astype(float).copy()
+    # Target pair marginals
+    targets = {}
+    for i in range(N):
+        for j in range(i + 1, N):
+            targets[(i, j)] = _pair_marginal(p_emp, i, j)
+
+    for _ in range(max_iter):
+        max_dev = 0.0
+        for i in range(N):
+            for j in range(i + 1, N):
+                cur = _pair_marginal(p, i, j)
+                tgt = targets[(i, j)]
+                # Avoid div by zero: only rescale cells with positive cur
+                ratio = np.ones_like(tgt)
+                mask = cur > 0
+                ratio[mask] = tgt[mask] / cur[mask]
+                # Broadcast ratio onto full joint
+                # Build scaling tensor
+                scale = ratio
+                # Insert singleton dims for axes other than i,j
+                shape = [1] * N
+                shape[i] = p.shape[i]
+                shape[j] = p.shape[j]
+                # ratio is (k_i, k_j); reshape
+                scale = scale.reshape(shape)
+                p = p * scale
+                # Renormalize lightly for numerical stability
+                s = p.sum()
+                if s > 0:
+                    p /= s
+                max_dev = max(max_dev, float(np.max(np.abs(cur - tgt))))
+        if max_dev < tol:
+            break
+    return p
+
+
+def kl_divergence(p: np.ndarray, q: np.ndarray, eps: float = 1e-12) -> float:
+    """KL(p||q) in bits over a common support table."""
+    p = np.asarray(p, dtype=float)
+    q = np.asarray(q, dtype=float)
+    mask = p > 0
+    q_safe = np.maximum(q, eps)
+    return float(np.sum(p[mask] * np.log2(p[mask] / q_safe[mask])))
+
+
+def compute_res_pair_window(win: np.ndarray, max_iter: int = 200) -> float:
+    """
+    Strong Level-3 residual on one window of joint symbols.
+
+        Res_pair = KL(P_emp || P^(2))
+
+    where P^(2) is the pairwise IPF / maxent fit to all bipolar marginals
+    (Foundations paper / Nota formal 2).
+
+    For N<3 the residual is identically 0 (no order-3 structure possible).
+    """
+    win = np.asarray(win)
+    if win.ndim != 2 or win.shape[0] == 0:
+        return float("nan")
+    if win.shape[1] < 3:
+        return 0.0
+    try:
+        p_emp, _ = _empirical_joint_table(win)
+    except ValueError:
+        return float("nan")
+    # Degenerate: if support is too thin, IPF still runs on observed alphabet
+    p2 = pairwise_maxent_ipf(p_emp, max_iter=max_iter)
+    return kl_divergence(p_emp, p2)
+
+
+def compute_res_pair(
+    S: np.ndarray,
+    window: int = DEFAULT_WINDOW_TAU,
+    stride: int = 1,
+    max_iter: int = 200,
+    fill: bool = False,
+) -> np.ndarray:
+    """
+    Windowed strong Level-3 residual Res_pair(t) on symbol matrix S (T, N).
+
+    Primary theoretical Level-3 object; excess3 remains the scalable proxy.
+    Computational cost grows with alphabet product; intended for small N
+    (e.g. m=3 Bandt–Pompe, N<=4–5) or as a validation diagnostic.
+    """
+    S = np.asarray(S)
+    T_eff, N = S.shape
+    out = np.full(T_eff, np.nan)
+    if T_eff < window or N < 3:
+        if N < 3:
+            out[:] = 0.0
+        return out
+    for t in range(window - 1, T_eff, stride):
+        out[t] = compute_res_pair_window(S[t - window + 1 : t + 1], max_iter=max_iter)
+    if fill:
+        last = np.nan
+        for t in range(T_eff):
+            if np.isfinite(out[t]):
+                last = out[t]
+            elif np.isfinite(last):
+                out[t] = last
+    return out
 
 
 def mean_excess_pre_post(
@@ -404,6 +622,7 @@ def surrogate_pvalue_delta_excess3(
     delay: int = DEFAULT_DELAY,
     alpha_syn: float = ALPHA_SYN,
     alpha_surp: float = ALPHA_SURP,
+    legacy_pooled_counting: bool = False,
 ) -> Dict[str, float]:
     """
     Two-sided surrogate p-value for |Δ excess3| under independent phase-shuffle
@@ -444,6 +663,7 @@ def surrogate_pvalue_delta_excess3(
             stride=stride,
             alpha_syn=alpha_syn,
             alpha_surp=alpha_surp,
+            legacy_pooled_counting=legacy_pooled_counting,
         )
         _, _, d = mean_excess_pre_post(excess, split_s)
         return float(d)
@@ -515,12 +735,102 @@ def alpha_weights(
     delta3: float = 2.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Retorna α1(λ), α2(λ), α3(λ) según la forma propuesta.
+    Template α family (Via A / design engine defaults).
+
+    Returns α1(λ), α2(λ), α3(λ). Not normalized; used as relative weights
+    in ΔRECD and f_ℓ shares. Foundations Note 3.
     """
     a1 = alpha10 * np.exp(-beta1 * lam)
     a2 = alpha20 * (1.0 + gamma2 * lam)
     a3 = alpha30 * (1.0 + gamma3 * lam + delta3 * lam**2)
     return a1, a2, a3
+
+
+def alpha_weights_gibbs(
+    lam: np.ndarray,
+    u: Tuple[float, float, float] = (0.0, 1.0, 2.0),
+    beta0: float = 0.0,
+    kappa: float = 1.5,
+    normalize: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Gibbs / maxent depth weights (Via B, Foundations Note 3).
+
+        α_ℓ^G(λ) ∝ exp( β(λ) · u(ℓ) ),   β(λ) = β0 + κ·λ ≥ 0
+
+    with u(1) < u(2) < u(3). Relative monotonicity α3/α1 = exp(β·Δu)
+    increases in λ when κ≥0. This is an *admissible design engine*, not
+    an observable of the joint S_t.
+
+    Parameters
+    ----------
+    lam : array-like
+        Regime intensity λ ≥ 0.
+    u : triple
+        Depth utilities (u1, u2, u3), strictly increasing recommended.
+    beta0, kappa :
+        β(λ) = max(0, β0 + κ·λ).
+    normalize :
+        If True, return simplex weights (sum_ℓ α_ℓ = 1). If False (default),
+        return unnormalized positive weights comparable in spirit to the
+        template family (which is also unnormalized).
+
+    Returns
+    -------
+    a1, a2, a3 : ndarrays
+        Gibbs depth weights.
+    """
+    lam = np.asarray(lam, dtype=float)
+    u1, u2, u3 = u
+    beta = np.maximum(0.0, beta0 + kappa * lam)
+    e1 = np.exp(beta * u1)
+    e2 = np.exp(beta * u2)
+    e3 = np.exp(beta * u3)
+    if normalize:
+        z = e1 + e2 + e3
+        return e1 / z, e2 / z, e3 / z
+    return e1, e2, e3
+
+
+def alpha_compare_template_gibbs(
+    lam_grid: Optional[np.ndarray] = None,
+    u: Tuple[float, float, float] = (0.0, 1.0, 2.0),
+    beta0: float = 0.0,
+    kappa: float = 1.5,
+    **template_kwargs,
+) -> Dict[str, np.ndarray]:
+    """
+    Compare normalized template vs Gibbs α on a λ grid (Conj. bridge Note 3).
+
+    Both families are L1-normalized per λ so shapes are comparable.
+    Returns dict with lam, a*_template, a*_gibbs, L1 and L∞ errors.
+    """
+    if lam_grid is None:
+        lam_grid = np.linspace(0.0, 2.0, 41)
+    lam_grid = np.asarray(lam_grid, dtype=float)
+    t1, t2, t3 = alpha_weights(lam_grid, **template_kwargs)
+    g1, g2, g3 = alpha_weights_gibbs(
+        lam_grid, u=u, beta0=beta0, kappa=kappa, normalize=False
+    )
+    # L1 normalize each family
+    ts = t1 + t2 + t3
+    gs = g1 + g2 + g3
+    nt = (t1 / ts, t2 / ts, t3 / ts)
+    ng = (g1 / gs, g2 / gs, g3 / gs)
+    l1 = np.abs(nt[0] - ng[0]) + np.abs(nt[1] - ng[1]) + np.abs(nt[2] - ng[2])
+    linf = np.maximum.reduce(
+        [np.abs(nt[0] - ng[0]), np.abs(nt[1] - ng[1]), np.abs(nt[2] - ng[2])]
+    )
+    return {
+        "lam": lam_grid,
+        "t1": nt[0], "t2": nt[1], "t3": nt[2],
+        "g1": ng[0], "g2": ng[1], "g3": ng[2],
+        "L1": l1,
+        "Linf": linf,
+        "max_L1": np.array([float(np.max(l1))]),
+        "max_Linf": np.array([float(np.max(linf))]),
+        "mean_L1": np.array([float(np.mean(l1))]),
+    }
 
 
 def regime_lambda_proxy(
@@ -561,17 +871,22 @@ def compute_recd_from_conjunctions(
     stride: int = 1,
     alpha_syn: float = ALPHA_SYN,
     alpha_surp: float = ALPHA_SURP,
+    compute_res: bool = False,
+    legacy_pooled_counting: bool = False,
     **alpha_kwargs
 ) -> Dict[str, np.ndarray]:
     """
     Full nested ordinal RECD pipeline:
     - Bandt–Pompe symbols
-    - Φ1, Φ2, Φ3 (binary) + continuous excess³ (primary Level-3 readout)
+    - Φ1, Φ2, Φ3 (binary) + continuous excess³ (exportable Level-3 proxy)
+    - optional ``res_pair`` strong residual (IPF / KL to pairwise maxent)
     - λ and α(λ) regime weights
     - ΔRECD and cumulative T_recd
 
-    Level-3 contract (excess³ methods):
-    - Continuous ``excess3`` is the primary magnitude for order-3 claims.
+    Level-3 contract (excess³ methods + foundations paper):
+    - Continuous ``excess3`` is the scalable primary *proxy* for order-3 claims.
+    - ``res_pair`` (if ``compute_res=True``) is the strong theoretical residual
+      Res_pair = KL(P || P^(2)); costly for large alphabets / N.
     - ``phi3`` is a secondary threshold discretisation of excess3.
     - ``delta_recd`` keeps the legacy λ-weighted clock using **binary** Φ₃
       (back-compat with CCTP / Discrete Extramental Clock nesting). Do not
@@ -591,6 +906,12 @@ def compute_recd_from_conjunctions(
         stride=stride,
         alpha_syn=alpha_syn,
         alpha_surp=alpha_surp,
+        legacy_pooled_counting=legacy_pooled_counting,
+    )
+    res_pair = (
+        compute_res_pair(S, window=window_tau, stride=stride)
+        if compute_res
+        else None
     )
 
     # Determinar λ: override > tau-derived > zero
@@ -619,7 +940,7 @@ def compute_recd_from_conjunctions(
     delta_recd = a1 * phi1 + a2 * phi2 + a3 * phi3_safe
     T_recd = np.nancumsum(delta_recd)
 
-    return {
+    result = {
         "S": S,
         "phi1": phi1,
         "phi2": phi2,
@@ -641,9 +962,15 @@ def compute_recd_from_conjunctions(
             "alpha_surp": alpha_surp,
             "level3_primary": "excess3",
             "level3_secondary": "phi3",
+            "level3_strong": "res_pair",
+            "compute_res": compute_res,
+            "legacy_pooled_counting": legacy_pooled_counting,
             **alpha_kwargs,
         },
     }
+    if res_pair is not None:
+        result["res_pair"] = res_pair
+    return result
 
 
 # ============================================================

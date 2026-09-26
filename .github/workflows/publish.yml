@@ -1,3 +1,11 @@
+# Trusted Publishing to PyPI. No API token in the repo.
+# Register this workflow on the existing project:
+#   https://pypi.org/manage/project/nested-recd/publishing/
+# Fields:
+#   Owner:            johelpadilla
+#   Repository name:  nested-recd
+#   Workflow name:    publish.yml
+#   Environment name: (leave empty)
 name: Publish to PyPI
 
 on:
@@ -5,25 +13,42 @@ on:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-publish:
+  build:
+    name: Build distribution
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/nested-recd
-    permissions:
-      id-token: write
-      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install build tools
-        run: python -m pip install --upgrade pip build twine
-      - name: Build
-        run: python -m build
-      - name: Check
-        run: twine check dist/*
-      - name: Publish to PyPI
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          rm -rf dist build
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

@@ -1,12 +1,24 @@
 # nested-recd
 
+> **Correction (0.2.3, local, not yet released).** Versions ≤ 0.2.2 computed
+> `H_joint` and the pairwise entropies inside `Syn` with `np.unique` on a list
+> of tuples and no `axis=0`. NumPy flattens that input, so `Syn`, `excess3` and
+> binary `phi3` were not the published definition when `N ≥ 3`. `Surp` and
+> `Res_pair` were not affected. For `N = 2`, `Syn` is 0 either way. 0.2.3 counts
+> joint rows. `legacy_pooled_counting=True` reproduces the old numbers and warns.
+> See `CHANGELOG.md`. The deposited package is still 0.2.2
+> ([10.5281/zenodo.21937204](https://doi.org/10.5281/zenodo.21937204)); PyPI is
+> still 0.2.0.
+
 [![PyPI version](https://img.shields.io/pypi/v/nested-recd.svg)](https://pypi.org/project/nested-recd/)
 [![Python](https://img.shields.io/pypi/pyversions/nested-recd.svg)](https://pypi.org/project/nested-recd/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Nested ordinal RECD** — pure-NumPy implementation of nested ordinal conjunction levels (Φ₁, Φ₂, Φ₃), the continuous **excess³** Level-3 proxy, and λ-weighted Discrete Extramental Clock (RECD) accumulation.
+**Nested ordinal RECD** — pure-NumPy implementation of nested ordinal conjunction levels (Φ₁, Φ₂, Φ₃), the continuous **excess³** Level-3 *proxy* (T-IV; not the strong residual), optional **Res_pair** \(=\mathrm{KL}(P\|P^{(2)})\), Gibbs-α weights, and λ-weighted Discrete Extramental Clock (RECD) accumulation.
 
-This is the **canonical Level-3 software** for the Systemic Tau / RECD stack (cardiac CCTP/SDDB pilot, excess³ methods preprint, Academy Learning Tau).
+This is the **canonical nested-clock software** for the Systemic Tau / RECD stack (foundations paper, excess³ methods preprint, cardiac CCTP/SDDB pilot, Academy Learning Tau).
+
+**Léxico (no negociable):** *strong Level-3* := `Res_pair`. *excess3* := exportable proxy. Report `w` with any Res_pair figure. Abundance (excess3) ≠ aggregation share \(f_3\).
 
 ## Install
 
@@ -53,6 +65,15 @@ print("weights:", out["params"]["alpha_syn"], out["params"]["alpha_surp"])
 print("final T_recd:", float(out["T_recd"][-1]))
 ```
 
+### Strong residual Res_pair (optional)
+
+```python
+out = compute_recd_from_conjunctions(X, compute_res=True)
+# or, on a symbol window:
+from nested_recd import compute_res_pair_window
+# Always report window length with Res_pair (Nota 4: w=13 can bias chaos).
+```
+
 ### Continuous excess³ only
 
 ```python
@@ -79,7 +100,7 @@ out = compute_recd_from_conjunctions(X, tau_s=tau_s)
 out = compute_recd_from_conjunctions(X, lam_override=0.5)
 ```
 
-**Note:** `delta_recd` / `T_recd` use **binary Φ₃** in the α-weighted clock (legacy Discrete Extramental Clock). For scientific Level-3 claims, report **continuous excess³** and nulls on `|Δ excess3|`.
+**Note:** `delta_recd` / `T_recd` use **binary Φ₃** in the α-weighted clock (legacy Discrete Extramental Clock). For **exportable / scalable** Level-3 reporting, use continuous **excess³** and nulls on `|Δ excess3|`. For **strong** Level-3 claims, report **`res_pair`** (enable `compute_res=True`) **and the window `w`**. Do not identify the two.
 
 ## What it computes
 
@@ -87,10 +108,11 @@ out = compute_recd_from_conjunctions(X, lam_override=0.5)
 |--------|---------|
 | **Φ₁** | Co-occurrence of identical ordinal symbols across variable pairs |
 | **Φ₂** | Persistence of pairwise ordinal relations over lag `d` |
-| **excess³** | Continuous hybrid: `0.6·Syn + 0.4·Surp` (**primary** Level-3) |
+| **excess³** | Continuous hybrid: `0.6·Syn + 0.4·Surp` (**exportable Level-3 proxy**; T-IV) |
 | **Φ₃** | Binary ticks of excess³ above `theta3` (**secondary**) |
+| **Res_pair** | Strong Level-3 residual `KL(P ‖ P^(2))` (optional; always report `w`) |
 | **λ** | Chaos / reorganization intensity (from `τ_s` or `lam_override`) |
-| **α(λ)** | Level weights: α₁ decays with λ; α₂, α₃ grow with λ |
+| **α(λ)** | Design-engine weights (template or Gibbs-α); **not** a joint observable |
 | **ΔRECD** | `α₁Φ₁ + α₂Φ₂ + α₃Φ₃` (legacy clock; binary Φ₃) |
 | **T_recd** | Cumulative sum of ΔRECD |
 
@@ -115,7 +137,8 @@ from nested_recd import (
     compute_phi1, compute_phi2, compute_phi3,
     compute_phi3_excess, compute_excess3_window,
     mean_excess_pre_post, surrogate_pvalue_delta_excess3,
-    compute_lambda, alpha_weights, regime_lambda_proxy,
+    compute_lambda, alpha_weights, alpha_weights_gibbs, regime_lambda_proxy,
+    compute_res_pair, compute_res_pair_window,
     compute_weighted_contributions, high_level3_rate,
     generate_multivariate_symbols,
     phase_shuffle_independent, generate_surrogate_ensemble,
@@ -138,6 +161,12 @@ If you use excess³ / Level-3 from this package, cite the **methods** preprint (
 
 > Padilla-Villanueva, J. (2026). *excess³: A Pre-Specified Continuous Proxy for Order-3 Synergistic Surplus* (methods). Zenodo. https://doi.org/10.5281/zenodo.21385937
 
+Deposited software (0.2.2, joint-counting bug):
+
+> Padilla-Villanueva, J. (2026). *nested-recd 0.2.2: Nested ordinal RECD, excess³ proxy, and Res_pair*. Zenodo. https://doi.org/10.5281/zenodo.21937204
+
+Local correction 0.2.3 is in this tree and does not yet have its own DOI.
+
 Software / related stack:
 
 > Padilla-Villanueva, J. (2026). Systemic Tau software archive. Zenodo. https://doi.org/10.5281/zenodo.20576241
@@ -152,7 +181,9 @@ CCTP/SDDB pilot:
   title   = {nested-recd: Nested ordinal RECD levels and continuous excess³},
   year    = {2026},
   url     = {https://github.com/johelpadilla/nested-recd},
-  version = {0.2.0}
+  version = {0.2.3},
+  doi     = {10.5281/zenodo.21937204},
+  note    = {DOI is the deposited 0.2.2 record. Version 0.2.3 corrects joint counting and is not yet deposited.}
 }
 ```
 

@@ -1,9 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this software for Level-3 / excess³, please cite the methods preprint and this package."
+message: "If you use this software for Level-3 / excess³ / Res_pair, please cite the methods preprint, the foundations paper, and this package."
 type: software
-title: "nested-recd: Nested ordinal RECD levels and continuous excess³"
-version: 0.2.0
-date-released: "2026-07-15"
+title: "nested-recd: Nested ordinal RECD levels, excess³ proxy, and Res_pair"
+version: 0.2.3
+date-released: "2026-09-25"
 authors:
   - family-names: Padilla-Villanueva
     given-names: Johel
@@ -12,6 +12,13 @@ authors:
 license: MIT
 repository-code: "https://github.com/johelpadilla/nested-recd"
 url: "https://pypi.org/project/nested-recd/"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21937204
+    description: Deposited release 0.2.2 (joint-counting bug). 0.2.3 is not yet deposited.
+  - type: doi
+    value: 10.5281/zenodo.21937203
+    description: Concept DOI (all versions)
 keywords:
   - RECD
   - excess3
@@ -21,9 +28,11 @@ keywords:
   - complexity
 abstract: >-
   Pure-NumPy implementation of nested ordinal conjunction levels (Φ1, Φ2, Φ3),
-  continuous excess³ (primary Level-3 hybrid proxy 0.6·Syn + 0.4·Surp),
-  phase-shuffle nulls on |Δ excess3|, and λ-weighted Discrete Extramental Clock
-  accumulation. Canonical software for the excess³ methods specification.
+  continuous excess³ (exportable hybrid proxy 0.6·Syn + 0.4·Surp; not the
+  definition of strong Level-3), optional Res_pair = KL(P || P^(2)),
+  Gibbs-α weights, phase-shuffle nulls on |Δ excess3|, and λ-weighted
+  Discrete Extramental Clock. Canonical software for the excess³ methods
+  specification and the Systemic Tau / RECD foundations paper.
 references:
   - type: article
     title: "excess³: A Pre-Specified Continuous Proxy for Order-3 Synergistic Surplus"
