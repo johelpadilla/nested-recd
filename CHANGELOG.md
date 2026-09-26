@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.2.3 — 2026-09-25 (local correction; not yet deposited or released)
+## 0.2.3 — 2026-09-25
+
+Zenodo: https://doi.org/10.5281/zenodo.22970079
+Concept: https://doi.org/10.5281/zenodo.21937203
+The 0.2.2 deposit remains https://doi.org/10.5281/zenodo.21937204.
 
 ### Fixed — joint counting in `Syn` (affects `excess3`)
 
@@ -46,4 +50,4 @@ On this window the corrected maximum is at the grid edge, not at
 - `tests/test_joint_counting.py`.
 
 The Zenodo record 10.5281/zenodo.21937204 remains the 0.2.2 deposit.
-This tree does not assign a new DOI.
+This version is 10.5281/zenodo.22970079.

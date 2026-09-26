@@ -1,14 +1,15 @@
 # nested-recd
 
-> **Correction (0.2.3, local, not yet released).** Versions ≤ 0.2.2 computed
-> `H_joint` and the pairwise entropies inside `Syn` with `np.unique` on a list
-> of tuples and no `axis=0`. NumPy flattens that input, so `Syn`, `excess3` and
-> binary `phi3` were not the published definition when `N ≥ 3`. `Surp` and
-> `Res_pair` were not affected. For `N = 2`, `Syn` is 0 either way. 0.2.3 counts
-> joint rows. `legacy_pooled_counting=True` reproduces the old numbers and warns.
-> See `CHANGELOG.md`. The deposited package is still 0.2.2
-> ([10.5281/zenodo.21937204](https://doi.org/10.5281/zenodo.21937204)); PyPI is
-> still 0.2.0.
+> **Correction (0.2.3).** Versions ≤ 0.2.2 computed `H_joint` and the pairwise
+> entropies inside `Syn` with `np.unique` on a list of tuples and no `axis=0`.
+> NumPy flattens that input, so `Syn`, `excess3` and binary `phi3` were not the
+> published definition when `N ≥ 3`. `Surp` and `Res_pair` were not affected.
+> For `N = 2`, `Syn` is 0 either way. 0.2.3 counts joint rows.
+> `legacy_pooled_counting=True` reproduces the old numbers and warns.
+> See `CHANGELOG.md`. This version:
+> [10.5281/zenodo.22970079](https://doi.org/10.5281/zenodo.22970079).
+> The 0.2.2 deposit remains
+> [10.5281/zenodo.21937204](https://doi.org/10.5281/zenodo.21937204).
 
 [![PyPI version](https://img.shields.io/pypi/v/nested-recd.svg)](https://pypi.org/project/nested-recd/)
 [![Python](https://img.shields.io/pypi/pyversions/nested-recd.svg)](https://pypi.org/project/nested-recd/)
@@ -161,11 +162,11 @@ If you use excess³ / Level-3 from this package, cite the **methods** preprint (
 
 > Padilla-Villanueva, J. (2026). *excess³: A Pre-Specified Continuous Proxy for Order-3 Synergistic Surplus* (methods). Zenodo. https://doi.org/10.5281/zenodo.21385937
 
-Deposited software (0.2.2, joint-counting bug):
+This software (0.2.3):
 
-> Padilla-Villanueva, J. (2026). *nested-recd 0.2.2: Nested ordinal RECD, excess³ proxy, and Res_pair*. Zenodo. https://doi.org/10.5281/zenodo.21937204
+> Padilla-Villanueva, J. (2026). *nested-recd 0.2.3: Nested ordinal RECD, excess³ proxy, and Res_pair*. Zenodo. https://doi.org/10.5281/zenodo.22970079
 
-Local correction 0.2.3 is in this tree and does not yet have its own DOI.
+The previous release (0.2.2), which pooled symbols inside Syn, remains citable as https://doi.org/10.5281/zenodo.21937204.
 
 Software / related stack:
 
@@ -182,8 +183,7 @@ CCTP/SDDB pilot:
   year    = {2026},
   url     = {https://github.com/johelpadilla/nested-recd},
   version = {0.2.3},
-  doi     = {10.5281/zenodo.21937204},
-  note    = {DOI is the deposited 0.2.2 record. Version 0.2.3 corrects joint counting and is not yet deposited.}
+  doi     = {10.5281/zenodo.22970079}
 }
 ```
 

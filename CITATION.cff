@@ -14,8 +14,11 @@ repository-code: "https://github.com/johelpadilla/nested-recd"
 url: "https://pypi.org/project/nested-recd/"
 identifiers:
   - type: doi
+    value: 10.5281/zenodo.22970079
+    description: This version (0.2.3)
+  - type: doi
     value: 10.5281/zenodo.21937204
-    description: Deposited release 0.2.2 (joint-counting bug). 0.2.3 is not yet deposited.
+    description: Previous release 0.2.2 (pooled-symbol counting in Syn)
   - type: doi
     value: 10.5281/zenodo.21937203
     description: Concept DOI (all versions)
